@@ -18,6 +18,9 @@
 #include <time.h>
 #include <chrono>
 #include <iostream>
+
+#include "thread_Pool.h"
+
 //Precision to use for calculations
 #define fptype float
 
@@ -182,6 +185,10 @@ fptype BlkSchlsEqEuroNoDiv(fptype sptprice,
     return OptionPrice;
 }
 fptype price;
+std::condition_variable cv;
+std::atomic<int> threads_finished_counter(0);
+std::mutex waiter_mutex;
+
 void dowrk(int start_option, int end_option) {
     for (int i = start_option; i < end_option; i++) {
         for (int j = 0; j < NUM_RUNS; j++) {
@@ -191,6 +198,13 @@ void dowrk(int start_option, int end_option) {
             prices[i] = price;
         }
     }
+	//signal main that this thread is done
+	{
+        std::cout << "Signaling main thread" << std::endl;
+		std::unique_lock<std::mutex> lock(waiter_mutex);
+		threads_finished_counter++;
+		cv.notify_one();
+	}
 };
 
 int main(int argc, char** argv)
@@ -274,20 +288,26 @@ int main(int argc, char** argv)
     auto start = std::chrono::steady_clock::now();
 
     //setup threads at this pointd
-    const unsigned thread_count = std::thread::hardware_concurrency();
-    std::vector<std::thread> threads;
+    const int thread_count = std::thread::hardware_concurrency();
+    //std::vector<std::thread> threads;
     int work_per_thread = numOptions / thread_count;
 
-
-
+    Thread_Pool thread_pool;
 	for (int t = 0; t < thread_count; t++) {
 		int start_option = t * work_per_thread;
 		int end_option = (t == thread_count - 1) ? numOptions : start_option + work_per_thread;
-		threads.push_back(std::thread(dowrk, start_option, end_option));
+        thread_pool.submit([start_option, end_option]() {dowrk(start_option, end_option);});
+		//threads.push_back(std::thread(dowrk, start_option, end_option));
 	}
-    for (auto& th : threads) {
-        th.join();
+    {
+		std::cout << "Waiting for threads to finish...." << std::endl;
+        std::unique_lock<std::mutex> lck(waiter_mutex);
+        cv.wait(lck, [&]() {return threads_finished_counter==thread_count;});
     }
+    std::cout << "writing to file now..." << std::endl;
+ /*   for (auto& th : threads) {
+        th.join();
+    }*/
  
 
     //fptype price;
