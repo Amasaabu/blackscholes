@@ -9,9 +9,13 @@ class Thread_Pool
 	std::vector<std::thread> threads;
 	Queue<Func> wrk_queue;
 	void worker();
+	std::atomic<bool> done;
+	std::condition_variable cv;
+	std::mutex mtx;
 public:
 	Thread_Pool();
 	~Thread_Pool();
 	void submit(Func f);
+	void shutdown();
 };
 

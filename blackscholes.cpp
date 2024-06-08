@@ -200,7 +200,6 @@ void dowrk(int start_option, int end_option) {
     }
 	//signal main that this thread is done
 	{
-        std::cout << "Signaling main thread" << std::endl;
 		std::unique_lock<std::mutex> lock(waiter_mutex);
 		threads_finished_counter++;
 		cv.notify_one();
@@ -284,12 +283,10 @@ int main(int argc, char** argv)
     printf("Size of data: %d\n", numOptions * (sizeof(OptionData) + sizeof(int)));
 
 
-    //measuring time performanmce
+   //measuring time performanmce
     auto start = std::chrono::steady_clock::now();
-
-    //setup threads at this pointd
     const int thread_count = std::thread::hardware_concurrency();
-    //std::vector<std::thread> threads;
+    std::vector<std::thread> threads;
     int work_per_thread = numOptions / thread_count;
 
     Thread_Pool thread_pool;
@@ -304,7 +301,7 @@ int main(int argc, char** argv)
         std::unique_lock<std::mutex> lck(waiter_mutex);
         cv.wait(lck, [&]() {return threads_finished_counter==thread_count;});
     }
-    std::cout << "writing to file now..." << std::endl;
+
  /*   for (auto& th : threads) {
         th.join();
     }*/
@@ -323,9 +320,9 @@ int main(int argc, char** argv)
     //        prices[i] = price;
     //    }
     //}
-
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
-    std::cout << "Operation completed in (milli): "<<elapsed.count() << std::endl;
+    std::cout << "Operation completed in (milli): " << elapsed.count() << std::endl;
+    std::cout << "writing to file now..." << std::endl;
     //Write prices to output file
     file = fopen(outputFile, "w");
     if (file == NULL) {
