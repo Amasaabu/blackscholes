@@ -10,7 +10,6 @@ class Thread_Pool
 	Queue<Func> wrk_queue;
 	void worker();
 	std::atomic<bool> done;
-	std::condition_variable cv;
 	std::mutex mtx;
 public:
 	Thread_Pool();

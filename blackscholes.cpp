@@ -286,7 +286,6 @@ int main(int argc, char** argv)
    //measuring time performanmce
     auto start = std::chrono::steady_clock::now();
     const int thread_count = std::thread::hardware_concurrency();
-    std::vector<std::thread> threads;
     int work_per_thread = numOptions / thread_count;
 
     Thread_Pool thread_pool;
@@ -302,10 +301,6 @@ int main(int argc, char** argv)
         cv.wait(lck, [&]() {return threads_finished_counter==thread_count;});
     }
 
- /*   for (auto& th : threads) {
-        th.join();
-    }*/
- 
 
     //fptype price;
     //for (i = 0; i < numOptions; i++) {
