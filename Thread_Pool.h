@@ -4,6 +4,8 @@
 #include <functional>
 #include "Queue.h"
 using Func = std::function<void()>;
+using Func2 = std::function<void(int, int)>;
+
 class Thread_Pool
 {
 	std::vector<std::thread> threads;
@@ -11,10 +13,13 @@ class Thread_Pool
 	void worker();
 	std::atomic<bool> done;
 	std::mutex mtx;
+	int num_of_threads;
+	int work_load_per_thread;
+	int total_zize_of_data;
 public:
-	Thread_Pool();
+	Thread_Pool(int);
 	~Thread_Pool();
-	void submit(Func f);
+	void submit(Func2 f);
 	void shutdown();
-};
 
+};
