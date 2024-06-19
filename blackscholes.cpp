@@ -289,12 +289,12 @@ int main(int argc, char** argv)
     std::vector<std::thread> threads;
     int work_per_thread = numOptions / thread_count;
 
-    Thread_Pool thread_pool;
+    //Thread_Pool thread_pool;
 	for (int t = 0; t < thread_count; t++) {
 		int start_option = t * work_per_thread;
 		int end_option = (t == thread_count - 1) ? numOptions : start_option + work_per_thread;
-        thread_pool.submit([start_option, end_option]() {dowrk(start_option, end_option);});
-		//threads.push_back(std::thread(dowrk, start_option, end_option));
+        //thread_pool.submit([start_option, end_option]() {dowrk(start_option, end_option);});
+		threads.push_back(std::thread(dowrk, start_option, end_option));
 	}
     {
 		std::cout << "Waiting for threads to finish...." << std::endl;
@@ -302,11 +302,11 @@ int main(int argc, char** argv)
         cv.wait(lck, [&]() {return threads_finished_counter==thread_count;});
     }
 
- /*   for (auto& th : threads) {
+    for (auto& th : threads) {
         th.join();
-    }*/
+    }
  
-
+    //single threaded version
     //fptype price;
     //for (i = 0; i < numOptions; i++) {
 
