@@ -279,14 +279,13 @@ int main(int argc, char** argv)
 
    //measuring time performanmce
     auto start = std::chrono::steady_clock::now();
-    //const int thread_count = std::thread::hardware_concurrency();
-    //int work_per_thread = numOptions / thread_count;
 
     Thread_Pool thread_pool(numOptions);
     thread_pool.submit(dowrk);
     thread_pool.shutdown();
 
 
+    //single threaded version
     //fptype price;
     //for (i = 0; i < numOptions; i++) {
 
