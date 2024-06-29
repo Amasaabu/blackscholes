@@ -19,28 +19,52 @@ void Thread_Pool::worker() {
 }
 
 
-Thread_Pool::Thread_Pool(int total_zize_of_data) {
+Thread_Pool::Thread_Pool(int number_of_items) {
 	done.store(false);
+	//this->start_point = start_point;
+	//this->end_point = end_point;
 	this->num_of_threads = std::thread::hardware_concurrency();
-	this->work_load_per_thread = total_zize_of_data / this->num_of_threads;
-	this->total_zize_of_data = total_zize_of_data;
+	//this->work_load_per_thread = (end_point-start_point) / this->num_of_threads;
+	//this->total_zize_of_data = end_point - start_point;
+	//dont use more threads than data#
+	this->num_of_itmes = number_of_items;
+	num_of_threads = std::min(this->num_of_threads,number_of_items);
 	//spin up workers based on CPU cores
 	for (int i = 0; i < this->num_of_threads; i++) {
-		int start_row = i * this->work_load_per_thread;
-		int end_row = (i == this->num_of_threads - 1) ? total_zize_of_data : start_row + this->work_load_per_thread;
 		threads.push_back(std::thread(&Thread_Pool::worker, this));
 	}
 }
 
 void Thread_Pool::submit(Func2 F) {
 	for (int i = 0; i < this->num_of_threads; i++) {
-		int start_row = i * this->work_load_per_thread;
-		int end_row = (i == this->num_of_threads - 1) ? this->total_zize_of_data : start_row + this->work_load_per_thread;
-		wrk_queue.push([start_row, end_row, F]() {F(start_row, end_row); });
-
+		int start_row = start_point + i * this->work_load_per_thread;
+		int end_row = (i == this->num_of_threads - 1) ? end_point : start_row + this->work_load_per_thread;
+		wrk_queue.push([this, F]() {F(0, this->num_of_itmes); });
 	}
-	//wrk_queue.push(F);
 }
+
+//Thread_Pool::Thread_Pool(int total_zize_of_data) {
+//	done.store(false);
+//	this->num_of_threads = std::thread::hardware_concurrency();
+//	this->work_load_per_thread = total_zize_of_data / this->num_of_threads;
+//	this->total_zize_of_data = total_zize_of_data;
+//	//spin up workers based on CPU cores
+//	for (int i = 0; i < this->num_of_threads; i++) {
+//		int start_row = i * this->work_load_per_thread;
+//		int end_row = (i == this->num_of_threads - 1) ? total_zize_of_data : start_row + this->work_load_per_thread;
+//		threads.push_back(std::thread(&Thread_Pool::worker, this));
+//	}
+//}
+
+//void Thread_Pool::submit(Func2 F) {
+//	for (int i = 0; i < this->num_of_threads; i++) {
+//		int start_row = i * this->work_load_per_thread;
+//		int end_row = (i == this->num_of_threads - 1) ? this->total_zize_of_data : start_row + this->work_load_per_thread;
+//		wrk_queue.push([start_row, end_row, F]() {F(start_row, end_row); });
+//
+//	}
+//	//wrk_queue.push(F);
+//}
 
 //ensure all threads are joined
 Thread_Pool::~Thread_Pool() {

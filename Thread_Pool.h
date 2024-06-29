@@ -16,6 +16,10 @@ class Thread_Pool
 	int num_of_threads;
 	int work_load_per_thread;
 	int total_zize_of_data;
+	int start_point;
+	int end_point;
+
+	int num_of_itmes;
 public:
 	Thread_Pool(int);
 	~Thread_Pool();
