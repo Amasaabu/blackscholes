@@ -43,7 +43,6 @@ typedef struct OptionData_ {
 OptionData* data;
 fptype* prices;
 int numOptions;
-
 int* otype;
 fptype* sptprice;
 fptype* strike;
@@ -315,15 +314,12 @@ int main(int argc, char** argv)
         //now divide work among processes using mpi
         int task_per_processor = numOptions / world_size;
         int remaining_tasks = numOptions % world_size;
-        int start_index = 1;
+        //process 0 will also do some work so we skip first set of tasks
+        int num_options_to_receive_for_process0 = task_per_processor + (0 < remaining_tasks ? 1 : 0);
+        int start_index = num_options_to_receive_for_process0;
+        std::cout << "Processor 0 distributing load...." << std::endl;
         for (int i = 1; i < world_size; i++)
         {
-            // int tasks_to_send = task_per_processor + (i < remaining_tasks ? 1 : 0);
-            //always subtrace 1 from i to get the correct start point in the array
-            //int start_point = (i - 1) * task_per_processor + std::min(i - 1, remaining_tasks);
-            //int end_point = start_point + tasks_to_send;
-            std::cout << "Processor 0 distributing load...." << std::endl;
-
             int num_options_to_send = task_per_processor + (i < remaining_tasks ? 1 : 0);
             //tag 0 is number of options to send and tag 1 is the data
             MPI_Send(&num_options_to_send, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
@@ -332,37 +328,38 @@ int main(int argc, char** argv)
             start_index += num_options_to_send;
         }
         std::cout<<"Processor 0 Finished distributing load...."<<std::endl;
+
         //thread 0 will also do some work
-        float computed_price;
-        int num_options_to_process = task_per_processor + (0 < remaining_tasks ? 1 : 0);
-        Thread_Pool thread_pool(num_options_to_process);
-        thread_pool.submit([&computed_price](int start, int end) {
+       
+        Thread_Pool thread_pool(num_options_to_receive_for_process0);
+        std::vector<float> computed_total(num_options_to_receive_for_process0);
+        thread_pool.submit([&computed_total](int start, int end) {
             std::cout << "Start " << start << " End " << end << std::endl;
             for (int i = start; i < end; i++) {
                 // Perform calculations for each option
-                std::cout << "Running work/..." << " Start option " << start << " End Option" << end << std::endl;
                 for (int j = 0; j < NUM_RUNS; j++) {
-                    computed_price = BlkSchlsEqEuroNoDiv(data[i].s, data[i].strike,
+                    computed_total[i] = BlkSchlsEqEuroNoDiv(data[i].s, data[i].strike,
                         data[i].r, data[i].v, data[i].t,
                         (data[i].OptionType == 'P' ? 1 : 0), 0);
-                    //prices[i] = price;
                 }
             }
             });
         //ensure all threads are joined
         thread_pool.shutdown();
-        std::cout << "Processor " << world_rank << "Finished" <<" Result is "<<computed_price <<std::endl;
-        prices[0] = computed_price;
+        //now task 0 would write into prices
+        for (int i = 0; i < computed_total.size(); ++i) {
+            prices[i] = computed_total[i];
+        }
+        start_index = start_index+ num_options_to_receive_for_process0;
         MPI_Barrier(MPI_COMM_WORLD);
         //float received_prices;
-        //int num_options_to_receive;
+        int option_porcessed;
         int start_in;
         // Process 0 receives prices from all other processes
         for (int proc = 1; proc < world_size; proc++) {
-            //MPI_Recv(&num_options_to_receive, 1, MPI_INT, proc, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-          // MPI_Recv(&received_prices + proc * num_options_to_receive, num_options_to_receive, MPI_FLOAT, proc, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&option_porcessed, 1, MPI_INT, proc, 5, MPI_COMM_WORLD, MPI_STATUSES_IGNORE);
             MPI_Recv(&start_in, 1, MPI_INT, proc, 3, MPI_COMM_WORLD, MPI_STATUSES_IGNORE);
-            MPI_Recv(&prices[start_in], 1, MPI_FLOAT, proc, 4, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&prices[start_in], option_porcessed, MPI_FLOAT, proc, 4, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
        
         }
 
@@ -409,26 +406,26 @@ int main(int argc, char** argv)
         MPI_Recv(&start_index, 1, MPI_INT, 0, 2, MPI_COMM_WORLD, MPI_STATUSES_IGNORE);
         std::cout << "Processor " << world_rank << " Received "<< num_options_to_receive << std::endl;
         Thread_Pool thread_pool(num_options_to_receive);
-        float computed_price;
-        thread_pool.submit([&computed_price](int start, int end) {
+        std::vector<float> computed_toal(num_options_to_receive);
+        thread_pool.submit([&computed_toal](int start, int end) {
             std::cout<<"Start "<<start<<" End "<<end<<std::endl;
             for (int i = start; i < end; i++) {
                 // Perform calculations for each option
                 std::cout << "Running work/..." << " Start option " << start << " End Option" << end << std::endl;
                 for (int j = 0; j < NUM_RUNS; j++) {
-                    computed_price = BlkSchlsEqEuroNoDiv(data[i].s, data[i].strike,
+                    computed_toal[i] = BlkSchlsEqEuroNoDiv(data[i].s, data[i].strike,
                         data[i].r, data[i].v, data[i].t,
                         (data[i].OptionType == 'P' ? 1 : 0), 0);
                     //prices[i] = price;
                 }
+                std::cout << "Price: " << computed_toal[i] << std::endl;
             }
             });
         //ensure all threads are joined
         thread_pool.shutdown();
-        //now send result back to thread 0, tag 2 is the price and tag 3 is the number of options
-        // MPI_Send(&num_options_to_receive, 1, MPI_INT, 0, 3, MPI_COMM_WORLD);
         MPI_Send(&start_index, 1, MPI_INT, 0, 3, MPI_COMM_WORLD);
-        MPI_Send(&computed_price, num_options_to_receive, MPI_FLOAT, 0, 4, MPI_COMM_WORLD);
+        MPI_Send(computed_toal.data(), num_options_to_receive, MPI_FLOAT, 0, 4, MPI_COMM_WORLD);
+        MPI_Send(&num_options_to_receive, 1, MPI_INT, 0, 5, MPI_COMM_WORLD);
         /*std::cout<<"Computed Prices "<<computed_price<<std::endl;*/
         std::cout << "Processor " << world_rank << "Finished" << std::endl;
 
