@@ -36,10 +36,29 @@ Thread_Pool::Thread_Pool(int number_of_items) {
 }
 
 void Thread_Pool::submit(Func2 F) {
-	for (int i = 0; i < this->num_of_threads; i++) {
-		int start_row = start_point + i * this->work_load_per_thread;
-		int end_row = (i == this->num_of_threads - 1) ? end_point : start_row + this->work_load_per_thread;
-		wrk_queue.push([this, F]() {F(0, this->num_of_itmes); });
+	// Calculate workload per thread to ensure even distribution
+	int work_load_per_thread = num_of_itmes / num_of_threads;
+	int remaining_work = num_of_itmes % num_of_threads;
+
+	int start_row = 0;
+	for (int i = 0; i < num_of_threads; i++) {
+		int end_row = start_row + work_load_per_thread + (remaining_work > 0 ? 1 : 0);
+		// Adjust remaining work after allocating an extra item to this thread
+		if (remaining_work > 0) {
+			remaining_work--;
+		}
+
+		// Capture the current start_row and end_row for this task
+		int task_start = start_row;
+		int task_end = end_row;
+
+		// Submit a new task to the work queue
+		wrk_queue.push([F, task_start, task_end]() {
+			F(task_start, task_end);
+			});
+
+		// Update start_row for the next iteration
+		start_row = end_row;
 	}
 }
 
