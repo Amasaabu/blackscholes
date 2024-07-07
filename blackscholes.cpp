@@ -300,9 +300,9 @@ int main(int argc, char** argv)
         printf("Size of datas: %d\n", numOptions * (sizeof(OptionData) + sizeof(int)));
     }
    // mpi_lib.init(numOptions, sizeof(OptionData) + sizeof(int));
+    mpi_lib.broadcast(&numOptions, 1, 0);
     mpi_lib.init(numOptions, sizeof(OptionData));
 
-    mpi_lib.broadcast(&numOptions, 1, 0);
 
    
    auto sendcounts = mpi_lib.get_sendcounts();
@@ -331,9 +331,9 @@ int main(int argc, char** argv)
     
 
    
-//    mpi_lib.barrier();
+//   mpi_lib.barrier();
     mpi_lib.gather_v(local_results, prices);
-    cout<<"Processor 0 Finished gathering results...."<<endl;
+    cout<<"1.Processor 0 Finished gathering results...."<<endl;
     if (world_rank == 0) {
         std::cout << "writing to file now..." << std::endl;
         //Write prices to output file
