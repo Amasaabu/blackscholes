@@ -103,14 +103,24 @@ template <class T, class U, class R>
 void Mpi_Lib<T, U, R>::scatterV(T* data_to_scatter, T* local_data, Funca f) {
 
 
-	MPI_Scatterv(data_to_scatter, this->sendcounts.data(), displs.data(), MPI_INT, local_data, sendcounts[world_rank], MPI_INT, 0, MPI_COMM_WORLD);
-
-
+	MPI_Scatterv(data_to_scatter, this->sendcounts.data(), displs.data(), MPI_BYTE, local_data, sendcounts[world_rank], MPI_BYTE, 0, MPI_COMM_WORLD);
+	//ensure every processor has work to do
+	//if (sendcounts[world_rank] == 0) {
+	//	MPI_Finalize();
+	//	return;
+	//}
+	//ensure every processor has work to do
+	if (sendcounts[world_rank] == 0) {
+		cout << "Processor " << world_rank << " has no work to do" << endl;
+		//MPI_Finalize();
+		return;
+	}
 	//now split accross threads
 	int threadPoolSize = sendcounts[world_rank] / this->elements_per_unit;
 	cout << "sendcounts[world_rank]: " << sendcounts[world_rank] << endl;
 	cout << "size_of_data: " << size_of_data << endl;
 	cout << "threadPoolSize: " << threadPoolSize << endl;
+
 	Thread_Pool thread_pool(threadPoolSize); //potentially divide by size_v, i could create an overload
 	thread_pool.submit(f);
 	//ensure all threads are joined
@@ -139,8 +149,11 @@ void Mpi_Lib<T, U, R>::gather_v(R* local_result, R* result) {
 		// Update displacement for the next process
 		curr_displ += sendcounts_gather[i];
 	}
-
-	MPI_Gatherv(local_result, this->sendcounts[world_rank], MPI_LONG_LONG, result, sendcounts_gather.data(), displs_gather.data(), MPI_LONG_LONG, 0, MPI_COMM_WORLD);
+	cout << "********************" << endl;
+	cout<< "Processor " << world_rank << " is gathering results" << endl;
+	cout<< "Processor "<< world_rank<<"has " << this->sendcounts[world_rank] << " elements" << endl;
+	MPI_Gatherv(local_result, this->sendcounts[world_rank], MPI_FLOAT, result, sendcounts_gather.data(), displs_gather.data(), MPI_FLOAT, 0, MPI_COMM_WORLD);
+	cout<< "Processor " << world_rank << " has finished work" << endl;
 }
 
 //return pointer to displa
