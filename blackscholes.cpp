@@ -308,8 +308,8 @@ int main(int argc, char** argv)
    auto sendcounts = mpi_lib.get_sendcounts();
   //  int num_local_options = sendcounts[world_rank] / sizeof(OptionData);
     
-    OptionData* local_data=new OptionData[sendcounts[world_rank]];
-    float *local_results= new float [sendcounts[world_rank]];
+    OptionData* local_data=new OptionData[sendcounts[world_rank]/sizeof(OptionData)];
+    float *local_results= new float [sendcounts[world_rank] / sizeof(OptionData)];
 
 
   //  std::cout << "Processor 0 distributing load...." << std::endl;
@@ -334,36 +334,36 @@ int main(int argc, char** argv)
 //    mpi_lib.barrier();
     mpi_lib.gather_v(local_results, prices);
     cout<<"Processor 0 Finished gathering results...."<<endl;
-    //if (world_rank == 0) {
-    //    std::cout << "writing to file now..." << std::endl;
-    //    //Write prices to output file
-    //    file = fopen(outputFile, "w");
-    //    if (file == NULL) {
-    //        printf("ERROR: Unable to open file %s.\n", outputFile);
-    //        exit(1);
-    //    }
-    //    rv = fprintf(file, "%i\n", numOptions);
-    //    if (rv < 0) {
-    //        printf("ERROR: Unable to write to file %s.\n", outputFile);
-    //        fclose(file);
-    //        exit(1);
-    //    }
-    //    for (i = 0; i < numOptions; i++) {
-    //        rv = fprintf(file, "%.18f\n", prices[i]);
-    //        if (rv < 0) {
-    //            printf("ERROR: Unable to write to file %s.\n", outputFile);
-    //            fclose(file);
-    //            exit(1);
-    //        }
-    //    }
-    //    rv = fclose(file);
-    //    if (rv != 0) {
-    //        printf("ERROR: Unable to close file %s.\n", outputFile);
-    //        exit(1);
-    //    }
+    if (world_rank == 0) {
+        std::cout << "writing to file now..." << std::endl;
+        //Write prices to output file
+        file = fopen(outputFile, "w");
+        if (file == NULL) {
+            printf("ERROR: Unable to open file %s.\n", outputFile);
+            exit(1);
+        }
+        rv = fprintf(file, "%i\n", numOptions);
+        if (rv < 0) {
+            printf("ERROR: Unable to write to file %s.\n", outputFile);
+            fclose(file);
+            exit(1);
+        }
+        for (i = 0; i < numOptions; i++) {
+            rv = fprintf(file, "%.18f\n", prices[i]);
+            if (rv < 0) {
+                printf("ERROR: Unable to write to file %s.\n", outputFile);
+                fclose(file);
+                exit(1);
+            }
+        }
+        rv = fclose(file);
+        if (rv != 0) {
+            printf("ERROR: Unable to close file %s.\n", outputFile);
+            exit(1);
+        }
 
         /*free(data_);
         free(prices);*/
-   // }
+    }
     return 0;
 }

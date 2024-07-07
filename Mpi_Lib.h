@@ -65,18 +65,26 @@ void Mpi_Lib<T, U, R>::init(int& size_v, int elements_per_unit) {
 	cout << "Size/of/data: " << size_of_data << endl;
 	cout << "Elements/per/unit: " << elements_per_unit << endl;
 	cout << "Rows/per/proc: " << rows_per_proc << endl;
+	int sum = 0;
 	for (int i = 0; i < world_size; ++i) {
+		sendcounts[i] = (numOptions / world_size) * elements_per_unit;
+		if (remainder > 0) {
+			sendcounts[i] += elements_per_unit;
+			remainder--;
+		}
+		displs[i] = sum;
+		sum = sum + sendcounts[i];
 		// Calculate the number of rows for this process
-		int rows_for_this_process = rows_per_proc + (i < extra_rows ? 1 : 0);
+		//int rows_for_this_process = rows_per_proc + (i < extra_rows ? 1 : 0);
 
-		// Calculate the number of elements (rows * columns) for this process
-		this->sendcounts[i] = rows_for_this_process * elements_per_unit;
+		//// Calculate the number of elements (rows * columns) for this process
+		//this->sendcounts[i] = rows_for_this_process * elements_per_unit;
 
-		// Set the displacement for this process
-		displs[i] = current_displ;
+		//// Set the displacement for this process
+		//displs[i] = current_displ;
 
-		// Update the displacement for the next process
-		current_displ += this->sendcounts[i];
+		//// Update the displacement for the next process
+		//current_displ += this->sendcounts[i];
 	}
 }
 
@@ -109,18 +117,18 @@ void Mpi_Lib<T, U, R>::scatterV(T* data_to_scatter, T* local_data, Funca f) {
 	//	MPI_Finalize();
 	//	return;
 	//}
-	//ensure every processor has work to do
-	if (sendcounts[world_rank] == 0) {
-		cout << "Processor " << world_rank << " has no work to do" << endl;
-		//MPI_Finalize();
-		return;
-	}
+
 	//now split accross threads
 	int threadPoolSize = sendcounts[world_rank] / this->elements_per_unit;
 	cout << "sendcounts[world_rank]: " << sendcounts[world_rank] << endl;
 	cout << "size_of_data: " << size_of_data << endl;
 	cout << "threadPoolSize: " << threadPoolSize << endl;
-
+	//ensure every processor has work to do
+	if (sendcounts[world_rank] == 0) {
+		cout << "......Processor " << world_rank << " has no work to do" << endl;
+		//MPI_Finalize();
+		return;
+	}
 	Thread_Pool thread_pool(threadPoolSize); //potentially divide by size_v, i could create an overload
 	thread_pool.submit(f);
 	//ensure all threads are joined
@@ -131,29 +139,54 @@ void Mpi_Lib<T, U, R>::scatterV(T* data_to_scatter, T* local_data, Funca f) {
 //Custom Gathrev
 template <class T, class U, class R>
 void Mpi_Lib<T, U, R>::gather_v(R* local_result, R* result) {
+
+	std::vector<int> recvcounts;
+	std::vector<int> rdispls;
+		recvcounts.resize(world_size);
+		rdispls.resize(world_size);
+		int total_results = numOptions;
+		int remainder = total_results % world_size;
+		int sum = 0;
+		for (int i = 0; i < world_size; i++) {
+			recvcounts[i] = (total_results / world_size);
+			if (remainder > 0) {
+				recvcounts[i]++;
+				remainder--;
+			}
+			rdispls[i] = sum;
+			sum += recvcounts[i];
+		}
+	
+
+
+	MPI_Gatherv(local_result, this->sendcounts[world_rank] / this->elements_per_unit, MPI_FLOAT,
+		result, recvcounts.data(), rdispls.data(), MPI_FLOAT,
+		0, MPI_COMM_WORLD);
+
+
 	//gather the results from all processors
-	vector<int> sendcounts_gather(this->world_size, 0);
-	vector<int> displs_gather(this->world_size, 0);
+	//vector<int> sendcounts_gather(this->world_size, 0);
+	//vector<int> displs_gather(this->world_size, 0);
 
-	int curr_displ = 0;
-	for (int i = 0; i < this->world_size; ++i) {
-		// Calculate the number of rows this process is responsible for
-		int rows_for_this_proc = rows_per_proc + (i < extra_rows ? 1 : 0);
+	//int curr_displ = 0;
+	//for (int i = 0; i < this->world_size; ++i) {
+	//	// Calculate the number of rows this process is responsible for
+	//	int rows_for_this_proc = rows_per_proc + (i < extra_rows ? 1 : 0);
 
-		// Each process sends back rows_for_this_proc * size_v elements
-		sendcounts_gather[i] = rows_for_this_proc * this->elements_per_unit;
+	//	// Each process sends back rows_for_this_proc * size_v elements
+	//	sendcounts_gather[i] = rows_for_this_proc * this->elements_per_unit;
 
-		// Displacement for this process's data in the gathered array
-		displs_gather[i] = curr_displ;
+	//	// Displacement for this process's data in the gathered array
+	//	displs_gather[i] = curr_displ;
 
-		// Update displacement for the next process
-		curr_displ += sendcounts_gather[i];
-	}
-	cout << "********************" << endl;
-	cout<< "Processor " << world_rank << " is gathering results" << endl;
-	cout<< "Processor "<< world_rank<<"has " << this->sendcounts[world_rank] << " elements" << endl;
-	MPI_Gatherv(local_result, this->sendcounts[world_rank], MPI_FLOAT, result, sendcounts_gather.data(), displs_gather.data(), MPI_FLOAT, 0, MPI_COMM_WORLD);
-	cout<< "Processor " << world_rank << " has finished work" << endl;
+	//	// Update displacement for the next process
+	//	curr_displ += sendcounts_gather[i];
+	//}
+	//cout << "********************" << endl;
+	//cout<< "Processor " << world_rank << " is gathering results" << endl;
+	//cout<< "Processor "<< world_rank<<"has " << this->sendcounts[world_rank] << " elements" << endl;
+	//MPI_Gatherv(local_result, this->sendcounts[world_rank], MPI_FLOAT, result, sendcounts_gather.data(), displs_gather.data(), MPI_FLOAT, 0, MPI_COMM_WORLD);
+	//cout<< "Processor " << world_rank << " has finished work" << endl;
 }
 
 //return pointer to displa
