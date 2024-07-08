@@ -300,7 +300,7 @@ int main(int argc, char** argv)
         printf("Size of datas: %d\n", numOptions * (sizeof(OptionData) + sizeof(int)));
     }
    // mpi_lib.init(numOptions, sizeof(OptionData) + sizeof(int));
-    mpi_lib.broadcast(&numOptions, 1, 0);
+    mpi_lib.broadcast(&numOptions, 1, 0, MPI_INT);
     mpi_lib.init(numOptions, sizeof(OptionData));
 
 
@@ -313,7 +313,7 @@ int main(int argc, char** argv)
 
 
   //  std::cout << "Processor 0 distributing load...." << std::endl;
-    mpi_lib.scatterV(data_, local_data, [ & local_results, &local_data](int start, int end) {
+    mpi_lib.scatterV(data_, local_data,MPI_BYTE, [ & local_results, &local_data](int start, int end) {
         std::cout << "Start " << start << " End " << end << std::endl;
         for (int i = start; i < end; i++) {
             // Perform calculations for each option
@@ -332,7 +332,7 @@ int main(int argc, char** argv)
 
    
 //   mpi_lib.barrier();
-    mpi_lib.gather_v(local_results, prices);
+    mpi_lib.gather_v(local_results, prices,MPI_FLOAT, false);
     cout<<"1.Processor 0 Finished gathering results...."<<endl;
     if (world_rank == 0) {
         std::cout << "writing to file now..." << std::endl;

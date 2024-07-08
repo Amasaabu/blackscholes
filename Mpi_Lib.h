@@ -6,17 +6,17 @@
 using namespace std;
 using Funca = std::function<void(int, int)>;
 
-template <class T,class U, class R>
+template <class T, class U, class R>
 class Mpi_Lib
 {
 public:
 	Mpi_Lib(int&, char**);
 	void init(int&, int elements_per_unit = 1);
-	void broadcast(U*, int count, int root);
+	void broadcast(U*, int , int , MPI_Datatype);
 	int get_world_rank();
 	vector<int> get_sendcounts();
-	void scatterV(T*, T*, Funca f);
-	void gather_v(R* local_result, R* result);
+	void scatterV(T*, T*,MPI_Datatype, Funca f);
+	void gather_v(R* local_result, R* result, MPI_Datatype,bool use_element_per_unit_scaling = false);
 	//void scatterV(int* data, int count_of_workload_to_be_distrtibuted, int* local_data, Func f);
 	int* get_displs();
 	void barrier();
@@ -76,7 +76,7 @@ void Mpi_Lib<T, U, R>::init(int& size_v, int elements_per_unit) {
 		int rows_for_this_process = rows_per_proc + (i < extra_rows ? 1 : 0);
 
 		// Calculate the number of elements (rows * columns) for this process
-		this->sendcounts[i] = rows_for_this_process * elements_per_unit;
+		this->sendcounts[i] = rows_for_this_process * this->elements_per_unit;
 		// Set the displacement for this process
 		displs[i] = current_displ;
 
@@ -87,9 +87,9 @@ void Mpi_Lib<T, U, R>::init(int& size_v, int elements_per_unit) {
 
 //implement brodcast
 template <class T, class U, class R>
-void Mpi_Lib<T, U, R>::broadcast(U* data_to_brodcast, int count, int root)
+void Mpi_Lib<T, U, R>::broadcast(U* data_to_brodcast, int count, int root, MPI_Datatype type_of_data_to_brodcast)
 {
-	MPI_Bcast(data_to_brodcast, count, MPI_INT, root, MPI_COMM_WORLD);
+	MPI_Bcast(data_to_brodcast, count, type_of_data_to_brodcast, root, MPI_COMM_WORLD);
 }
 //return world_rank
 template <class T, class U, class R>
@@ -105,10 +105,10 @@ vector<int> Mpi_Lib<T, U, R>::get_sendcounts() {
 //custom Scatterv
 //this would distribute the workload to all processors and accross threads with custom Thread_Pool
 template <class T, class U, class R>
-void Mpi_Lib<T, U, R>::scatterV(T* data_to_scatter, T* local_data, Funca f) {
+void Mpi_Lib<T, U, R>::scatterV(T* data_to_scatter, T* local_data,MPI_Datatype type_to_scatter, Funca f) {
 
 
-	MPI_Scatterv(data_to_scatter, this->sendcounts.data(), displs.data(), MPI_BYTE, local_data, sendcounts[world_rank], MPI_BYTE, 0, MPI_COMM_WORLD);
+	MPI_Scatterv(data_to_scatter, this->sendcounts.data(), displs.data(), type_to_scatter, local_data, sendcounts[world_rank], type_to_scatter, 0, MPI_COMM_WORLD);
 
 
 	//now split accross threads
@@ -130,7 +130,7 @@ void Mpi_Lib<T, U, R>::scatterV(T* data_to_scatter, T* local_data, Funca f) {
 
 //Custom Gathrev
 template <class T, class U, class R>
-void Mpi_Lib<T, U, R>::gather_v(R* local_result, R* result) {
+void Mpi_Lib<T, U, R>::gather_v(R* local_result, R* result,MPI_Datatype type_of_result, bool use_element_per_unit_scaling) {
 
 	//std::vector<int> recvcounts;
 	//std::vector<int> rdispls;
@@ -164,8 +164,14 @@ void Mpi_Lib<T, U, R>::gather_v(R* local_result, R* result) {
 	for (int i = 0; i < this->world_size; ++i) {
 		// Calculate the number of rows this process is responsible for
 		int rows_for_this_proc = rows_per_proc + (i < extra_rows ? 1 : 0);
-		// Each process sends back rows_for_this_proc * size_v elements
-		sendcounts_gather[i] = rows_for_this_proc ;
+		if (use_element_per_unit_scaling) {
+			// Each process sends back rows_for_this_proc * size_v elements
+			sendcounts_gather[i] = rows_for_this_proc * this->elements_per_unit;
+		}
+		else {
+			sendcounts_gather[i] = rows_for_this_proc;
+		}
+
 
 		// Displacement for this process's data in the gathered array
 		displs_gather[i] = curr_displ;
@@ -174,15 +180,15 @@ void Mpi_Lib<T, U, R>::gather_v(R* local_result, R* result) {
 		curr_displ += sendcounts_gather[i];
 	}
 	cout << "********************" << endl;
-	cout<< "Processor " << world_rank << " is gathering results" << endl;
-	cout<< "Processor "<< world_rank<<"has " << this->sendcounts[world_rank] << " elements" << endl;
-	MPI_Gatherv(local_result, sendcounts_gather[world_rank], MPI_FLOAT, result, sendcounts_gather.data(), displs_gather.data(), MPI_FLOAT, 0, MPI_COMM_WORLD);
-	cout<< "Processor " << world_rank << " has finished work" << endl;
+	cout << "Processor " << world_rank << " is gathering results" << endl;
+	cout << "Processor " << world_rank << "has " << this->sendcounts[world_rank] << " elements" << endl;
+	MPI_Gatherv(local_result, sendcounts_gather[world_rank], type_of_result, result, sendcounts_gather.data(), displs_gather.data(), type_of_result, 0, MPI_COMM_WORLD);
+	cout << "Processor " << world_rank << " has finished work" << endl;
 }
 
 //return pointer to displa
 template <class T, class U, class R>
-int* Mpi_Lib<T, U,R>::get_displs() {
+int* Mpi_Lib<T, U, R>::get_displs() {
 	return displs.data();
 }
 
