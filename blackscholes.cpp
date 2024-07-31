@@ -190,37 +190,9 @@ std::atomic<int> threads_finished_counter(0);
 std::mutex waiter_mutex;
 
 
-//void dowork(int start_option, int end_option) {
-//    for (int i = start_option; i < end_option; i++) {
-//    std::cout << "Running work/..." << " Start option " << start_option << " End Option" << end_option << std::endl;
-//    for (int j = 0; j < NUM_RUNS; j++) {
-//        std::cout << NUM_RUNS << std::endl;
-//        price = BlkSchlsEqEuroNoDiv(sptprice[i], strike[i],
-//            rate[i], volatility[i], otime[i],
-//            otype[i], 0);
-//        prices[i] = price;
-//        std::cout << "Price: " << price << std::endl;
-//    }
-//}
-//}
-//void dowrk(int numbs) {
-//    for (int i = 0; i < numbs; i++) {
-//
-//        /* Calling main function to calculate option value based on
-//         * Black & Scholes's equation.
-//         */
-//        for (int j = 0; j < NUM_RUNS; j++) {
-//            price = BlkSchlsEqEuroNoDiv(sptprice[i], strike[i],
-//                rate[i], volatility[i], otime[i],
-//                otype[i], 0);
-//            prices[i] = price;
-//        }
-//    }
-//};
 
 int main(int argc, char** argv)
 {
-
     Mpi_Lib<OptionData, int, float> mpi_lib(argc, argv);
     int world_rank = mpi_lib.get_world_rank();
     int i;
@@ -314,26 +286,21 @@ int main(int argc, char** argv)
 
   //  std::cout << "Processor 0 distributing load...." << std::endl;
     mpi_lib.scatterV(data_, local_data,MPI_BYTE, [ & local_results, &local_data](int start, int end) {
-        std::cout << "Start " << start << " End " << end << std::endl;
         for (int i = start; i < end; i++) {
             // Perform calculations for each option
-            std::cout << "Running work/..." << " Start option " << start << " End Option" << end << std::endl;
             for (int j = 0; j < NUM_RUNS; j++) {
                 local_results[i] = BlkSchlsEqEuroNoDiv(local_data[i].s, local_data[i].strike,
                     local_data[i].r, local_data[i].v, local_data[i].t,
                     (local_data[i].OptionType == 'P' ? 1 : 0), 0);
                 //prices[i] = price;
             }
-            std::cout << "Price: " << local_results[0] << std::endl;
         }
     });
-    std::cout << "Processor 0 Finished distributing load...." << std::endl;
     
 
    
 //   mpi_lib.barrier();
     mpi_lib.gather_v(local_results, prices,MPI_FLOAT, false);
-    cout<<"1.Processor 0 Finished gathering results...."<<endl;
     if (world_rank == 0) {
         std::cout << "writing to file now..." << std::endl;
         //Write prices to output file
@@ -362,8 +329,8 @@ int main(int argc, char** argv)
             exit(1);
         }
 
-        /*free(data_);
-        free(prices);*/
+        free(data_);
+        free(prices);
     }
     return 0;
 }
