@@ -11,16 +11,9 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
-#include <thread>
-#include <mutex>
-#include <vector>
-#include "Mpi_Lib.h"
 #include <time.h>
 #include <chrono>
 #include <iostream>
-#include "mpi.h"
-
-#include "thread_Pool.h"
 
 //Precision to use for calculations
 #define fptype float
@@ -185,44 +178,11 @@ fptype BlkSchlsEqEuroNoDiv(fptype sptprice,
     return OptionPrice;
 }
 fptype price;
-std::condition_variable cv;
-std::atomic<int> threads_finished_counter(0);
-std::mutex waiter_mutex;
 
-
-//void dowork(int start_option, int end_option) {
-//    for (int i = start_option; i < end_option; i++) {
-//    std::cout << "Running work/..." << " Start option " << start_option << " End Option" << end_option << std::endl;
-//    for (int j = 0; j < NUM_RUNS; j++) {
-//        std::cout << NUM_RUNS << std::endl;
-//        price = BlkSchlsEqEuroNoDiv(sptprice[i], strike[i],
-//            rate[i], volatility[i], otime[i],
-//            otype[i], 0);
-//        prices[i] = price;
-//        std::cout << "Price: " << price << std::endl;
-//    }
-//}
-//}
-//void dowrk(int numbs) {
-//    for (int i = 0; i < numbs; i++) {
-//
-//        /* Calling main function to calculate option value based on
-//         * Black & Scholes's equation.
-//         */
-//        for (int j = 0; j < NUM_RUNS; j++) {
-//            price = BlkSchlsEqEuroNoDiv(sptprice[i], strike[i],
-//                rate[i], volatility[i], otime[i],
-//                otype[i], 0);
-//            prices[i] = price;
-//        }
-//    }
-//};
 
 int main(int argc, char** argv)
 {
 
-    Mpi_Lib<OptionData, int, float> mpi_lib(argc, argv);
-    int world_rank = mpi_lib.get_world_rank();
     int i;
     int loopnum;
     fptype* buffer;
@@ -231,7 +191,6 @@ int main(int argc, char** argv)
     FILE* file;
     int rv;
 
-    if (world_rank == 0) {
         if (argc != 3)
         {
             printf("Usage:\n\t%s <inputFile> <outputFile>\n", argv[0]);
@@ -298,43 +257,26 @@ int main(int argc, char** argv)
 
 
         printf("Size of datas: %d\n", numOptions * (sizeof(OptionData) + sizeof(int)));
+    
+        //mark start of mpi operations
+    auto start = std::chrono::steady_clock::now();
+    fptype price;
+    for (i = 0; i < numOptions; i++) {
+
+    /* Calling main function to calculate option value based on
+     * Black & Scholes's equation.
+     */
+    for (int j = 0; j < NUM_RUNS; j++) {
+        price = BlkSchlsEqEuroNoDiv(sptprice[i], strike[i],
+            rate[i], volatility[i], otime[i],
+            otype[i], 0);
+        prices[i] = price;
     }
-   // mpi_lib.init(numOptions, sizeof(OptionData) + sizeof(int));
-    mpi_lib.broadcast(&numOptions, 1, 0, MPI_INT);
-    mpi_lib.init(numOptions, sizeof(OptionData));
+}
+    auto end = std::chrono::steady_clock::now();
 
-
-   
-   auto sendcounts = mpi_lib.get_sendcounts();
-  //  int num_local_options = sendcounts[world_rank] / sizeof(OptionData);
-    
-    OptionData* local_data=new OptionData[sendcounts[world_rank]/sizeof(OptionData)];
-    float *local_results= new float [sendcounts[world_rank] / sizeof(OptionData)];
-
-
-  //  std::cout << "Processor 0 distributing load...." << std::endl;
-    mpi_lib.scatterV(data_, local_data,MPI_BYTE, [ & local_results, &local_data](int start, int end) {
-        std::cout << "Start " << start << " End " << end << std::endl;
-        for (int i = start; i < end; i++) {
-            // Perform calculations for each option
-            std::cout << "Running work/..." << " Start option " << start << " End Option" << end << std::endl;
-            for (int j = 0; j < NUM_RUNS; j++) {
-                local_results[i] = BlkSchlsEqEuroNoDiv(local_data[i].s, local_data[i].strike,
-                    local_data[i].r, local_data[i].v, local_data[i].t,
-                    (local_data[i].OptionType == 'P' ? 1 : 0), 0);
-                //prices[i] = price;
-            }
-            std::cout << "Price: " << local_results[0] << std::endl;
-        }
-    });
-    std::cout << "Processor 0 Finished distributing load...." << std::endl;
-    
-
-   
-//   mpi_lib.barrier();
-    mpi_lib.gather_v(local_results, prices,MPI_FLOAT, false);
-    cout<<"1.Processor 0 Finished gathering results...."<<endl;
-    if (world_rank == 0) {
+    // Calculate the duration in milliseconds
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
         std::cout << "writing to file now..." << std::endl;
         //Write prices to output file
         file = fopen(outputFile, "w");
@@ -361,9 +303,9 @@ int main(int argc, char** argv)
             printf("ERROR: Unable to close file %s.\n", outputFile);
             exit(1);
         }
-
-        /*free(data_);
-        free(prices);*/
-    }
+        std::cout << "Time to complete execution of Blackscholes(milliseconds): " << duration << std::endl;
+        free(data_);
+        free(prices);
+    
     return 0;
 }
