@@ -271,6 +271,7 @@ int main(int argc, char** argv)
 
         printf("Size of datas: %d\n", numOptions * (sizeof(OptionData) + sizeof(int)));
     }
+    auto start = std::chrono::steady_clock::now();
    // mpi_lib.init(numOptions, sizeof(OptionData) + sizeof(int));
     mpi_lib.broadcast(&numOptions, 1, 0, MPI_INT);
     mpi_lib.init(numOptions, sizeof(OptionData));
@@ -301,6 +302,10 @@ int main(int argc, char** argv)
    
 //   mpi_lib.barrier();
     mpi_lib.gather_v(local_results, prices,MPI_FLOAT, false);
+    auto end = std::chrono::steady_clock::now();
+
+    // Calculate the duration in milliseconds
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     if (world_rank == 0) {
         std::cout << "writing to file now..." << std::endl;
         //Write prices to output file
@@ -328,7 +333,7 @@ int main(int argc, char** argv)
             printf("ERROR: Unable to close file %s.\n", outputFile);
             exit(1);
         }
-
+        std::cout << "Time to complete execution of Blackscholes(milliseconds): " << duration << std::endl;
         free(data_);
         free(prices);
     }
