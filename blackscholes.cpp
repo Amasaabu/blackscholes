@@ -20,7 +20,7 @@
 #include <iostream>
 #include "mpi.h"
 
-#include "thread_Pool.h"
+
 
 //Precision to use for calculations
 #define fptype float
