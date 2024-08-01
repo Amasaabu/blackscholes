@@ -14,13 +14,13 @@
 #include <thread>
 #include <mutex>
 #include <vector>
-#include "Mpi_Lib.h"
+
 #include <time.h>
 #include <chrono>
 #include <iostream>
 #include "mpi.h"
 
-
+#include "thread_Pool.h"
 
 //Precision to use for calculations
 #define fptype float
@@ -40,7 +40,7 @@ typedef struct OptionData_ {
     fptype DGrefval;   // DerivaGem Reference Value
 } OptionData;
 
-OptionData* data_;
+OptionData* data;
 fptype* prices;
 int numOptions;
 int* otype;
@@ -190,11 +190,46 @@ std::atomic<int> threads_finished_counter(0);
 std::mutex waiter_mutex;
 
 
+//void dowork(int start_option, int end_option) {
+//    for (int i = start_option; i < end_option; i++) {
+//    std::cout << "Running work/..." << " Start option " << start_option << " End Option" << end_option << std::endl;
+//    for (int j = 0; j < NUM_RUNS; j++) {
+//        std::cout << NUM_RUNS << std::endl;
+//        price = BlkSchlsEqEuroNoDiv(sptprice[i], strike[i],
+//            rate[i], volatility[i], otime[i],
+//            otype[i], 0);
+//        prices[i] = price;
+//        std::cout << "Price: " << price << std::endl;
+//    }
+//}
+//}
+//void dowrk(int numbs) {
+//    for (int i = 0; i < numbs; i++) {
+//
+//        /* Calling main function to calculate option value based on
+//         * Black & Scholes's equation.
+//         */
+//        for (int j = 0; j < NUM_RUNS; j++) {
+//            price = BlkSchlsEqEuroNoDiv(sptprice[i], strike[i],
+//                rate[i], volatility[i], otime[i],
+//                otype[i], 0);
+//            prices[i] = price;
+//        }
+//    }
+//};
 
 int main(int argc, char** argv)
 {
-    Mpi_Lib<OptionData, int, float> mpi_lib(argc, argv);
-    int world_rank = mpi_lib.get_world_rank();
+
+    // Initialize the MPI environment
+    MPI_Init(&argc, &argv);
+    // Get the rank of the process
+    int world_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+    //number of processors
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
     int i;
     int loopnum;
     fptype* buffer;
@@ -226,11 +261,11 @@ int main(int argc, char** argv)
         }
 
         // alloc spaces for the option data
-        data_ = (OptionData*)malloc(numOptions * sizeof(OptionData));
+        data = (OptionData*)malloc(numOptions * sizeof(OptionData));
         prices = (fptype*)malloc(numOptions * sizeof(fptype));
         for (loopnum = 0; loopnum < numOptions; ++loopnum)
         {
-            rv = fscanf(file, "%f %f %f %f %f %f %c %f %f", &data_[loopnum].s, &data_[loopnum].strike, &data_[loopnum].r, &data_[loopnum].divq, &data_[loopnum].v, &data_[loopnum].t, &data_[loopnum].OptionType, &data_[loopnum].divs, &data_[loopnum].DGrefval);
+            rv = fscanf(file, "%f %f %f %f %f %f %c %f %f", &data[loopnum].s, &data[loopnum].strike, &data[loopnum].r, &data[loopnum].divq, &data[loopnum].v, &data[loopnum].t, &data[loopnum].OptionType, &data[loopnum].divs, &data[loopnum].DGrefval);
             if (rv != 9) {
                 printf("ERROR: Unable to read from file %s.\n", inputFile);
                 fclose(file);
@@ -260,33 +295,40 @@ int main(int argc, char** argv)
         otype = (int*)(((unsigned long long)buffer2 + PAD) & ~(LINESIZE - 1));
 
         for (i = 0; i < numOptions; i++) {
-            otype[i] = (data_[i].OptionType == 'P') ? 1 : 0;
-            sptprice[i] = data_[i].s;
-            strike[i] = data_[i].strike;
-            rate[i] = data_[i].r;
-            volatility[i] = data_[i].v;
-            otime[i] = data_[i].t;
+            otype[i] = (data[i].OptionType == 'P') ? 1 : 0;
+            sptprice[i] = data[i].s;
+            strike[i] = data[i].strike;
+            rate[i] = data[i].r;
+            volatility[i] = data[i].v;
+            otime[i] = data[i].t;
         }
 
 
-        printf("Size of datas: %d\n", numOptions * (sizeof(OptionData) + sizeof(int)));
+        printf("Size of data: %d\n", numOptions * (sizeof(OptionData) + sizeof(int)));
     }
-    auto start = std::chrono::steady_clock::now();
-   // mpi_lib.init(numOptions, sizeof(OptionData) + sizeof(int));
-    mpi_lib.broadcast(&numOptions, 1, 0, MPI_INT);
-    mpi_lib.init(numOptions, sizeof(OptionData));
+    MPI_Bcast(&numOptions, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    std::vector<int> sendcounts(world_size);
+    std::vector<int> displs(world_size);
+    int remainder = numOptions % world_size;
+    int sum = 0;
+    for (i = 0; i < world_size; i++) {
+        //total number of bytes which each processor will receive
+        sendcounts[i] = (numOptions / world_size) * sizeof(OptionData);
+        if (remainder > 0) {
+            sendcounts[i] += sizeof(OptionData);
+            remainder--;
+        }
+        displs[i] = sum;
+        sum = sum + sendcounts[i];
+    }
 
+    int num_local_options = sendcounts[world_rank] / sizeof(OptionData);
+    std::vector<OptionData> local_data(num_local_options);
+    MPI_Scatterv(data, sendcounts.data(), displs.data(), MPI_BYTE, local_data.data(), num_local_options * sizeof(OptionData), MPI_BYTE, 0, MPI_COMM_WORLD);
 
-   
-   auto sendcounts = mpi_lib.get_sendcounts();
-  //  int num_local_options = sendcounts[world_rank] / sizeof(OptionData);
-    
-    OptionData* local_data=new OptionData[sendcounts[world_rank]/sizeof(OptionData)];
-    float *local_results= new float [sendcounts[world_rank] / sizeof(OptionData)];
-
-
-  //  std::cout << "Processor 0 distributing load...." << std::endl;
-    mpi_lib.scatterV(data_, local_data,MPI_BYTE, [ & local_results, &local_data](int start, int end) {
+    std::vector<float> local_results(num_local_options);
+    Thread_Pool thread_pool(num_local_options);
+    thread_pool.submit([&local_results, &local_data](int start, int end) {
         for (int i = start; i < end; i++) {
             // Perform calculations for each option
             for (int j = 0; j < NUM_RUNS; j++) {
@@ -295,17 +337,35 @@ int main(int argc, char** argv)
                     (local_data[i].OptionType == 'P' ? 1 : 0), 0);
                 //prices[i] = price;
             }
+          
         }
-    });
-    
+        });
+    //ensure all threads are joined
+    thread_pool.shutdown();
 
-   
-//   mpi_lib.barrier();
-    mpi_lib.gather_v(local_results, prices,MPI_FLOAT, false);
-    auto end = std::chrono::steady_clock::now();
+    std::vector<int> recvcounts;
+    std::vector<int> rdispls;
+    if (world_rank == 0) {
+        recvcounts.resize(world_size);
+        rdispls.resize(world_size);
+        int total_results = numOptions;
+        int remainder = total_results % world_size;
+        int sum = 0;
+        for (int i = 0; i < world_size; i++) {
+            recvcounts[i] = (total_results / world_size);
+            if (remainder > 0) {
+                recvcounts[i]++;
+                remainder--;
+            }
+            rdispls[i] = sum;
+            sum += recvcounts[i];
+        }
+    }
 
-    // Calculate the duration in milliseconds
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+    MPI_Gatherv(local_results.data(), num_local_options, MPI_FLOAT,
+        prices, recvcounts.data(), rdispls.data(), MPI_FLOAT,
+        0, MPI_COMM_WORLD);
     if (world_rank == 0) {
         std::cout << "writing to file now..." << std::endl;
         //Write prices to output file
@@ -333,9 +393,10 @@ int main(int argc, char** argv)
             printf("ERROR: Unable to close file %s.\n", outputFile);
             exit(1);
         }
-        std::cout << "Time to complete execution of Blackscholes(milliseconds): " << duration << std::endl;
-        free(data_);
+
+        free(data);
         free(prices);
     }
+    MPI_Finalize();
     return 0;
 }
