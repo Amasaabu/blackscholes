@@ -279,13 +279,13 @@ int main(int argc, char** argv)
 
    
    auto sendcounts = mpi_lib.get_sendcounts();
-  //  int num_local_options = sendcounts[world_rank] / sizeof(OptionData);
+  
     
     OptionData* local_data=new OptionData[sendcounts[world_rank]/sizeof(OptionData)];
     float *local_results= new float [sendcounts[world_rank] / sizeof(OptionData)];
 
 
-  //  std::cout << "Processor 0 distributing load...." << std::endl;
+
     mpi_lib.scatterV(data_, local_data,MPI_BYTE, [ & local_results, &local_data](int start, int end) {
         for (int i = start; i < end; i++) {
             // Perform calculations for each option
@@ -293,14 +293,12 @@ int main(int argc, char** argv)
                 local_results[i] = BlkSchlsEqEuroNoDiv(local_data[i].s, local_data[i].strike,
                     local_data[i].r, local_data[i].v, local_data[i].t,
                     (local_data[i].OptionType == 'P' ? 1 : 0), 0);
-                //prices[i] = price;
             }
         }
     });
     
 
    
-//   mpi_lib.barrier();
     mpi_lib.gather_v(local_results, prices,MPI_FLOAT, false);
     auto end = std::chrono::steady_clock::now();
 
